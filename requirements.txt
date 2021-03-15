@@ -1,0 +1,11 @@
+-i https://pypi.python.org/simple
+
+pandas~=1.2.3
+numpy~=1.19.5
+networkx~=2.5
+tqdm~=4.56.0
+plotly~=4.14.3
+igraph~=0.1.11
+leidenalg~=0.8.3
+scipy~=1.6.1
+scikit-learn~=0.24.1
