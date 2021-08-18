@@ -9,3 +9,5 @@ igraph~=0.1.11
 leidenalg~=0.8.3
 scipy~=1.6.1
 scikit-learn~=0.24.1
+python-louvain~=0.14
+matplotlib
