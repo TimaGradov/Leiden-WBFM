@@ -91,7 +91,7 @@ def hamming_sim(a, b, l1_norm, l2_norm, l2_norm_squared):
     return 1 - hamming(a, b)
 
 
-def calculate_similarity(G_n_f, l1_norm, l2_norm, l2_norm_squared, nodes, vect, similarity_metric, first_node):
+def calculate_similarity(G_n_f, l1_norm, l2_norm, l2_norm_squared, vect, similarity_metric, first_node):
     similarity_vector = {}
     for second_node in G_n_f.nodes():
         attr_a, attr_b = vect[first_node], vect[second_node]
@@ -119,7 +119,6 @@ def create_weighted_graph_from_two_graphs(G_first, G_second, alpha=0.5):
     G = nx.Graph()
     first_edges = list(G_first.edges)
     first_weight = G_first.size(weight='weight')
-    second_edges = list(G_second.edges)
     second_weight = G_second.size(weight='weight')
     for edge in tqdm_notebook(G_second.edges(data=True), total=G_second.number_of_edges(), leave=False):
         G.add_edge(edge[0], edge[1], weight=(edge[2]['weight']/second_weight) * (1-alpha))
@@ -136,7 +135,6 @@ def create_weighted_graph_from_two_graphs(G_first, G_second, alpha=0.5):
 def create_weighted_graph_from_two_graphs_without_norm(G_first, G_second, alpha=0.5):
     G = nx.Graph()
     first_edges = list(G_first.edges)
-    second_edges = list(G_second.edges)
     for edge in tqdm_notebook(G_second.edges(data=True), total=G_second.number_of_edges(), leave=False):
         G.add_edge(edge[0], edge[1], weight=(edge[2]['weight']) * (1-alpha))
     for i in tqdm_notebook(range(G_first.number_of_edges()), total=G_first.number_of_edges(), leave=False):
@@ -169,7 +167,7 @@ def create_weighted_graph(G, vect, mu, sigma, omega, similarity_metric,
         
         attr_a, attr_b = vect[a], vect[b]
         topic_similarity = similarity_metric(attr_a, attr_b, l1_norm, l2_norm, l2_norm_squared)
-        if gaussian_weighting == True:
+        if gaussian_weighting:
             
             w_g = calc_gaussian_weight(attr_a, attr_b, mu, sigma)
             topic_gaussian_similarity = topic_similarity * w_g
@@ -182,14 +180,14 @@ def create_weighted_graph(G, vect, mu, sigma, omega, similarity_metric,
     for a, b in tqdm_notebook(G_w.edges(), total=G_w.number_of_edges(), leave=False):
         
         if (a not in vect) or (b not in vect):
-            G_w[a][b]['weight'] = alpha #### /edge_sum
+            G_w[a][b]['weight'] = alpha
             G_w[b][a]['weight'] = alpha
             continue
         
         attr_a, attr_b = vect[a], vect[b]
         topic_similarity = similarity_metric(attr_a, attr_b, l1_norm, l2_norm, l2_norm_squared)
         
-        if gaussian_weighting == True:
+        if gaussian_weighting:
             
             w_g = calc_gaussian_weight(attr_a, attr_b, mu, sigma)
             topic_gaussian_similarity = topic_similarity * w_g
@@ -199,19 +197,18 @@ def create_weighted_graph(G, vect, mu, sigma, omega, similarity_metric,
         else:
             mixed_weight = (alpha * G_w[a][b]['weight'] / representative_edges_num + (1-alpha) * topic_similarity / similarity_metric_sum) * representative_edges_num
         
-        mixed_weight = max(mixed_weight, 0) ####???? I think, for cosine similarity
+        mixed_weight = max(mixed_weight, 0)
         G_w[a][b]['weight'] = mixed_weight
         G_w[b][a]['weight'] = mixed_weight
         
         mixed_weights_arr.append(mixed_weight)
-        
     
     mixed_weights_stats = pd.Series(mixed_weights_arr).describe().values[1:]
     
     return G_w, mixed_weights_stats
 
 
-def entropy(G, clusters, vect):
+def entropy(clusters, vect):
 
     for v in vect.values():
         attr_num = v.shape[0]
@@ -274,7 +271,7 @@ def calc_inter_cluster_density(clusters, G):
             outside_cluster = (len(nbr) - inside_cluster)
             
             e_out += outside_cluster / 2
-        if (len(nodes_clust) * (G.number_of_nodes() - len(nodes_clust)) == 0):
+        if len(nodes_clust) * (G.number_of_nodes() - len(nodes_clust)) == 0:
             cluster_density = e_out
         else:
             cluster_density = e_out /  (len(nodes_clust) * (G.number_of_nodes() - len(nodes_clust)))
@@ -351,7 +348,7 @@ def calc_modularity_density(clusters, G):
     return modularity_density
 
 
-def calc_diff_first_theorem(partition, G, attr_G, w_G, alpha):
+def calc_diff_first_theorem(partition, G, attr_G, w_G):
 
     str_weight = G.size(weight='weight')
     atr_weight = attr_G.size(weight='weight')
@@ -369,7 +366,7 @@ def calc_diff_first_theorem(partition, G, attr_G, w_G, alpha):
     return diff_mod_summ / 4
 
 
-def calc_diff_second_theorem(clusters, G, attr_G, w_G, alpha):
+def calc_diff_second_theorem(clusters, G, attr_G):
 
     str_weight = G.size(weight='weight')
     atr_weight = attr_G.size(weight='weight')
@@ -504,19 +501,18 @@ def dump_partition(partition, fname):
         json.dump(partition, f)
 
 
-def calculate_metrics_graphs(G, G_second, alpha, fname='fname.html', algo='louvain', viz=True, average=1, ground_truth=False, gt_labels = []):
+def calculate_metrics_graphs(G, G_second, alpha, algo='louvain', average=1, ground_truth=False, gt_labels=()):
                             
     G_w = create_weighted_graph_from_two_graphs(G, G_second, alpha=alpha)       
-    print("kek")
     modularity_list = np.zeros(shape=(average,1))
     modified_modularity_list = np.zeros(shape=(average,1))
     attr_modularity_list = np.zeros(shape=(average,1))
-    diff_mod_list_1 = np.zeros(shape=(average,1))
-    diff_mod_list_2 = np.zeros(shape=(average,1))
+
     if ground_truth:
         nmi_list = np.zeros(shape=(average,1))
     run_times = np.zeros(shape=(average,1))
-    partit = 0
+    partit = dict()
+    clusters = dict()
     ts = time.time()
     nx.write_gml(G_w, path="nx_graph_test")
     te = time.time()
@@ -557,17 +553,13 @@ def calculate_metrics_graphs(G, G_second, alpha, fname='fname.html', algo='louva
             print(len(alg_labels))
             nmi_list[i] = normalized_mutual_info_score(alg_labels, real_labels)
     
-    metrics_report = {}
+    metrics_report = dict()
     metrics_report['modularity_mean'] = np.mean(modularity_list)
     metrics_report['modularity_std'] = np.std(modularity_list)
     metrics_report['mod_modularity_mean'] = np.mean(modified_modularity_list)
     metrics_report['mod_modularity_std'] = np.std(modified_modularity_list)
     metrics_report['attr_modularity_mean'] = np.mean(attr_modularity_list)
-    metrics_report['attr_modularity_std'] = np.std(attr_modularity_list)    
-    metrics_report['diff_mod_1_mean'] = np.mean(diff_mod_list_1)
-    metrics_report['diff_mod_1_std'] = np.std(diff_mod_list_1)
-    metrics_report['diff_mod_2_mean'] = np.mean(diff_mod_list_2)
-    metrics_report['diff_mod_2_std'] = np.std(diff_mod_list_2)    
+    metrics_report['attr_modularity_std'] = np.std(attr_modularity_list)
     metrics_report['run_times_mean'] = np.mean(run_times)
     metrics_report['run_times_std'] = np.std(run_times)
     if ground_truth:
